@@ -650,7 +650,9 @@ def derive_and_persist_association(
 ) -> Dict[str, str]:
     rows = list(input_rows)
     association_id, separator, version = spec["association_id"].rpartition("@")
-    definition = conn.execute("SELECT * FROM association_definition WHERE association_id=? AND definition_version=?", (association_id, version)).fetchone() if separator else None
+    definition = conn.execute("SELECT * FROM association_definition WHERE association_id=? AND definition_version=?", (spec["association_id"], version)).fetchone() if separator else None
+    if definition is None and separator:
+        definition = conn.execute("SELECT * FROM association_definition WHERE association_id=? AND definition_version=?", (association_id, version)).fetchone()
     if definition is None:
         raise ValueError("declared association required")
     eligible = set(json.loads(definition["eligible_source_ids_json"])); material = [row for row in rows if not eligible or row.get("source_id") in eligible]

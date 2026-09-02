@@ -258,6 +258,20 @@ class AnalyticsContractTests(unittest.TestCase):
                 conn.executemany("INSERT INTO assessment_session VALUES (?,?,?,?,?,?,?,?)", [(f"s{i}", subject_id, "capacity", "v1", day, state, str(i) * 64, "2026-01-01T00:00:00Z") for i, (day, state) in enumerate((("2026-01-01", "complete"), ("2026-02-01", "complete"), ("2026-03-01", "partial")))])
                 conn.execute("INSERT INTO association_definition VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", ("food-sleep", "v1", "synthetic.measurement", "metric-v1", "synthetic.measurement", "metric-v1", "[]", "lag_days:0", '{"minimum_pairs":7}', "continuous", "theil_sen_median_slope", "observational", "2026-01-01T00:00:00Z"))
                 conn.execute("INSERT INTO source_epoch VALUES (?,?,?,?,?,?,?,?,?)", ("epoch-v1", subject_id, "synthetic.json", "synthetic.measurement", "2026-01-01T00:00:00Z", None, "initial", 0, "2026-01-01T00:00:00Z"))
+                association_args = {"subject_id": subject_id,
+                    "period_start": date(2026, 1, 1), "period_end": date(2026, 1, 7),
+                    "input_rows": [{"exposure": i, "outcome": i * 2, "exposure_date": f"2026-01-0{i}", "outcome_date": f"2026-01-0{i}"} for i in range(1, 8)],
+                    "method_version": "v1", "policy_version": "p1"}
+                self.analytics.derive_and_persist_association(conn, association_id="food-sleep@v1", **association_args)
+                self.assertEqual("food-sleep@v1", conn.execute("SELECT association_id FROM association_result").fetchone()[0])
+                conn.execute("SAVEPOINT canonical_association")
+                conn.execute("INSERT INTO association_definition VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", ("canonical-name@v1", "v1", "synthetic.measurement", "metric-v1", "synthetic.measurement", "metric-v1", "[]", "lag_days:0", '{"minimum_pairs":7}', "continuous", "theil_sen_median_slope", "observational", "2026-01-01T00:00:00Z"))
+                try:
+                    self.analytics.derive_and_persist_association(conn, association_id="canonical-name@v1", **association_args)
+                except ValueError as error:
+                    self.fail(f"canonical stored association ID rejected: {error}")
+                self.assertEqual("canonical-name@v1", conn.execute("SELECT association_id FROM association_result WHERE association_id='canonical-name@v1'").fetchone()[0])
+                conn.execute("ROLLBACK TO canonical_association"); conn.execute("RELEASE canonical_association")
                 with self.assertRaisesRegex(sqlite3.IntegrityError, "immutable"):
                     conn.execute("UPDATE assessment_protocol SET compatibility_rule='changed'")
                 with self.assertRaisesRegex(sqlite3.IntegrityError, "immutable"):
