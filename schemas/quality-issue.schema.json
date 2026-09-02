@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/anders-health-core/quality-issue.schema.json",
+  "title": "QualityIssue",
+  "type": "object",
+  "required": ["issue_id", "reason_code", "detected_at", "resolution_state"],
+  "properties": {
+    "issue_id": {"type": "string", "format": "uuid"},
+    "subject_id": {"type": ["string", "null"], "format": "uuid"},
+    "source_id": {"type": ["string", "null"]},
+    "source_record_key": {"type": ["string", "null"]},
+    "record_version_id": {"type": ["string", "null"], "format": "uuid"},
+    "reason_code": {"type": "string"},
+    "field_name": {"type": ["string", "null"]},
+    "detected_at": {"type": "string", "format": "date-time"},
+    "resolution_state": {"type": "string", "enum": ["open", "resolved", "ignored"]}
+  },
+  "additionalProperties": false
+}

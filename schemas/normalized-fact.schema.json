@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/anders-health-core/normalized-fact.schema.json",
+  "title": "NormalizedFact",
+  "type": "object",
+  "required": ["fact_id", "subject_id", "fact_type", "metric_id", "local_date", "source_record_version_id", "validation_state", "calculation_version"],
+  "properties": {
+    "fact_id": {"type": "string", "format": "uuid"},
+    "subject_id": {"type": "string", "format": "uuid"},
+    "fact_type": {"type": "string", "enum": ["food_entry", "meal", "sleep_session", "measurement", "body_composition", "activity_session", "strength_set", "capacity_assessment"]},
+    "metric_id": {"type": "string"},
+    "local_date": {"type": "string", "format": "date"},
+    "event_start_utc": {"type": ["string", "null"], "format": "date-time"},
+    "event_end_utc": {"type": ["string", "null"], "format": "date-time"},
+    "numeric_value": {"type": ["number", "null"]},
+    "text_value": {"type": ["string", "null"]},
+    "unit": {"type": ["string", "null"]},
+    "source_record_version_id": {"type": "string", "format": "uuid"},
+    "epoch_id": {"type": ["string", "null"], "format": "uuid"},
+    "validation_state": {"type": "string", "enum": ["accepted", "quarantined"]},
+    "calculation_version": {"type": "string"}
+  },
+  "additionalProperties": false
+}

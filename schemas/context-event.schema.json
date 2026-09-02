@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/anders-health-core/context-event.schema.json",
+  "title": "ContextEvent",
+  "type": "object",
+  "required": ["context_event_id", "subject_id", "category", "starts_on"],
+  "properties": {
+    "context_event_id": {"type": "string", "format": "uuid"},
+    "subject_id": {"type": "string", "format": "uuid"},
+    "category": {"type": "string", "enum": ["illness", "injury", "travel", "medication_change", "device_replacement", "source_change"]},
+    "starts_on": {"type": "string", "format": "date"},
+    "ends_on": {"type": ["string", "null"], "format": "date"},
+    "source_record_version_id": {"type": ["string", "null"], "format": "uuid"}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,13 @@
+{
+  "metric_id": "synthetic.measurement",
+  "display_name": "Synthetic measurement",
+  "value_kind": "number",
+  "canonical_unit": "count",
+  "percent_representation": null,
+  "aggregation_rule": "daily_last",
+  "minimum_value": 0,
+  "maximum_value": null,
+  "measurement_method": "synthetic fixture",
+  "local_day_policy": "source_local_date",
+  "definition_version": "metric-v1"
+}

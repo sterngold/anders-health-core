@@ -1,0 +1,60 @@
+{
+  "SourceManifest": {
+    "source_id": "synthetic.json",
+    "source_type": "file",
+    "display_name": "Synthetic JSON fixture",
+    "capabilities": ["measurement"],
+    "consent_state": "not_required",
+    "timestamp_semantics": "event_interval",
+    "revision_behavior": "monotonic_integer_version",
+    "contract_version": "source-v1"
+  },
+  "RawRecordEnvelope": {
+    "subject_id": "00000000-0000-4000-8000-000000000001",
+    "source_id": "synthetic.json",
+    "source_record_key": "record-1",
+    "source_version": 1,
+    "payload": {"metric": "synthetic.measurement", "value": 1.0, "unit": "count"},
+    "event_start_utc": "2026-01-01T08:00:00Z",
+    "timestamp_precision": "instant",
+    "local_date": "2026-01-01",
+    "day_policy_version": "day-v1",
+    "ingested_at": "2026-01-01T09:00:00Z"
+  },
+  "NormalizedFact": {
+    "fact_id": "00000000-0000-4000-8000-000000000002",
+    "subject_id": "00000000-0000-4000-8000-000000000001",
+    "fact_type": "measurement",
+    "metric_id": "synthetic.measurement",
+    "local_date": "2026-01-01",
+    "numeric_value": 1.0,
+    "unit": "count",
+    "source_record_version_id": "00000000-0000-4000-8000-000000000003",
+    "validation_state": "accepted",
+    "calculation_version": "normalize-v1"
+  },
+  "ContextEvent": {
+    "context_event_id": "00000000-0000-4000-8000-000000000004",
+    "subject_id": "00000000-0000-4000-8000-000000000001",
+    "category": "travel",
+    "starts_on": "2026-01-02"
+  },
+  "QualityIssue": {
+    "issue_id": "00000000-0000-4000-8000-000000000005",
+    "reason_code": "unit_mismatch",
+    "detected_at": "2026-01-01T09:00:00Z",
+    "resolution_state": "open"
+  },
+  "AnalyticsResult": {
+    "result_id": "00000000-0000-4000-8000-000000000006",
+    "result_type": "association",
+    "subject_id": "00000000-0000-4000-8000-000000000001",
+    "status": "early_association",
+    "method_version": "association-v1",
+    "policy_version": "policy-v1",
+    "input_snapshot_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "generated_at": "2026-01-31T09:00:00Z",
+    "paired_count": 7,
+    "claim_type": "observational"
+  }
+}

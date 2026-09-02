@@ -1,0 +1,13 @@
+{
+  "source_id": "synthetic.json",
+  "source_type": "file",
+  "display_name": "Synthetic JSON fixture",
+  "capabilities": ["measurement"],
+  "expected_cadence_days": 1,
+  "consent_state": "not_required",
+  "timestamp_semantics": "event_interval",
+  "canonical_timezone": "Etc/UTC",
+  "revision_behavior": "monotonic_integer_version",
+  "license_reference": "CC0 synthetic fixture",
+  "contract_version": "source-v1"
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/anders-health-core/source-manifest.schema.json",
+  "title": "SourceManifest",
+  "type": "object",
+  "required": ["source_id", "source_type", "display_name", "capabilities", "consent_state", "timestamp_semantics", "revision_behavior", "contract_version"],
+  "properties": {
+    "source_id": {"type": "string", "minLength": 1},
+    "source_type": {"type": "string", "enum": ["file", "device", "api", "manual"]},
+    "display_name": {"type": "string", "minLength": 1},
+    "capabilities": {"type": "array", "items": {"type": "string"}, "minItems": 1, "uniqueItems": true},
+    "expected_cadence_days": {"type": ["integer", "null"], "minimum": 1},
+    "consent_state": {"type": "string", "enum": ["granted", "revoked", "not_required"]},
+    "timestamp_semantics": {"type": "string", "enum": ["date_only", "instant", "event_interval"]},
+    "canonical_timezone": {"type": ["string", "null"]},
+    "revision_behavior": {"type": "string", "minLength": 1},
+    "license_reference": {"type": ["string", "null"]},
+    "contract_version": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}
