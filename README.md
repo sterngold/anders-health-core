@@ -29,7 +29,7 @@ See [DISCLAIMER.md](DISCLAIMER.md) before using the software with health data.
 
 ## Quick start
 
-Python 3.9 or newer, SQLite, and the declared `jsonschema` dependency are required.
+Python 3.12 or newer, SQLite, and the declared `jsonschema` dependency are required.
 
 ```sh
 python3 -m anders_health_core.cli demo --db demo.db

@@ -7,14 +7,14 @@ name = "anders-health-core"
 version = "0.1.0"
 description = "Local-first physical-health data and analytics foundation"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{name = "Anders Health Core contributors"}]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.12",
   "Topic :: Scientific/Engineering :: Information Analysis"
 ]
 dependencies = ["jsonschema>=4.18,<5"]
