@@ -1,6 +1,7 @@
 import importlib
 import csv
 import json
+import math
 import tempfile
 import unittest
 from collections import Counter
@@ -102,20 +103,25 @@ class RecordContractTests(unittest.TestCase):
             with self.database.connect(self.db_path) as conn:
                 conn.execute("BEGIN")
                 try:
+                    outcomes = self.records.import_envelopes(
+                        conn, [first, second], commit=False
+                    )
+                    self.assertEqual(
+                        ["inserted", "inserted"],
+                        [outcome["status"] for outcome in outcomes],
+                    )
+                    first_fact = self.records.normalize_fact(
+                        conn,
+                        source_record_version_id=outcomes[0]["record_version_id"],
+                        metric_id="synthetic.measurement",
+                        fact_type="measurement",
+                        numeric_value=1.0,
+                        unit="count",
+                        calculation_version="normalize-page-v1",
+                        commit=False,
+                    )
+                    self.assertEqual("accepted", first_fact["status"])
                     with self.assertRaises(self.records.RecordValidationError):
-                        outcomes = self.records.import_envelopes(
-                            conn, [first, second], commit=False
-                        )
-                        self.records.normalize_fact(
-                            conn,
-                            source_record_version_id=outcomes[0]["record_version_id"],
-                            metric_id="synthetic.measurement",
-                            fact_type="measurement",
-                            numeric_value=1.0,
-                            unit="count",
-                            calculation_version="normalize-page-v1",
-                            commit=False,
-                        )
                         self.records.normalize_fact(
                             conn,
                             source_record_version_id=outcomes[1]["record_version_id"],
@@ -260,7 +266,7 @@ class RecordContractTests(unittest.TestCase):
         self.assertEqual(2, self.conn.execute("SELECT COUNT(*) FROM source_record_version").fetchone()[0])
         self.assertEqual(0, self.conn.execute("SELECT COUNT(*) FROM current_source_record").fetchone()[0])
 
-    def test_observed_zero_is_a_fact_while_missing_stays_absent(self):
+    def test_normalized_values_accept_zero_and_reject_non_finite_numbers(self):
         imported = self.records.import_envelope(
             self.conn, self.records.synthetic_envelope(self.subject_id)
         )
@@ -276,6 +282,47 @@ class RecordContractTests(unittest.TestCase):
         self.assertEqual("accepted", fact["status"])
         row = self.conn.execute("SELECT numeric_value FROM normalized_fact").fetchone()
         self.assertEqual(0.0, row[0])
+        self.assertEqual(1, self.conn.execute("SELECT COUNT(*) FROM normalized_fact").fetchone()[0])
+
+        EXPECTED_NON_FINITE_CLASSES = 3
+        non_finite = (("nan", math.nan), ("positive-infinity", math.inf), ("negative-infinity", -math.inf))
+        self.assertEqual(EXPECTED_NON_FINITE_CLASSES, len(non_finite))
+        for label, value in non_finite:
+            with self.subTest(numeric_value=label):
+                envelope = self.records.synthetic_envelope(
+                    self.subject_id, source_record_key=f"non-finite-numeric-{label}"
+                )
+                outcome = self.records.import_envelope(self.conn, envelope)
+                with self.assertRaisesRegex(
+                    self.records.RecordValidationError, "invalid_numeric_value"
+                ):
+                    self.records.normalize_fact(
+                        self.conn,
+                        source_record_version_id=outcome["record_version_id"],
+                        metric_id="synthetic.measurement",
+                        fact_type="measurement",
+                        calculation_version="normalize-finite-v1",
+                        numeric_value=value,
+                        unit="count",
+                    )
+            with self.subTest(attribute_value=label):
+                envelope = self.records.synthetic_envelope(
+                    self.subject_id, source_record_key=f"non-finite-attribute-{label}"
+                )
+                outcome = self.records.import_envelope(self.conn, envelope)
+                with self.assertRaisesRegex(
+                    self.records.RecordValidationError, "invalid_attributes"
+                ):
+                    self.records.normalize_fact(
+                        self.conn,
+                        source_record_version_id=outcome["record_version_id"],
+                        metric_id="synthetic.measurement",
+                        fact_type="measurement",
+                        calculation_version="normalize-attributes-v1",
+                        numeric_value=1.0,
+                        unit="count",
+                        attributes={"nested": {"value": value}},
+                    )
         self.assertEqual(1, self.conn.execute("SELECT COUNT(*) FROM normalized_fact").fetchone()[0])
 
     def test_unknown_unit_is_quarantined_without_creating_fact(self):

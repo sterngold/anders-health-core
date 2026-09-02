@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 import sqlite3
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -51,7 +52,9 @@ def _now() -> str:
 
 
 def _canonical_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
 
 
 def _payload_hash(payload: Mapping[str, Any]) -> str:
@@ -640,7 +643,9 @@ def _normalize_fact(
     if (numeric_value is None) == (text_value is None):
         raise RecordValidationError("fact_value_cardinality", "numeric_value")
     if numeric_value is not None and (
-        isinstance(numeric_value, bool) or not isinstance(numeric_value, (int, float))
+        isinstance(numeric_value, bool)
+        or not isinstance(numeric_value, (int, float))
+        or (isinstance(numeric_value, float) and not math.isfinite(numeric_value))
     ):
         raise RecordValidationError("invalid_numeric_value", "numeric_value")
     if text_value is not None and not isinstance(text_value, str):
@@ -657,7 +662,10 @@ def _normalize_fact(
         raise RecordValidationError("timestamp_not_utc", "event_end_utc")
     if parsed_start is not None and parsed_end is not None and parsed_end < parsed_start:
         raise RecordValidationError("interval_order", "event_end_utc")
-    attributes_json = _canonical_json(dict(attributes or {}))
+    try:
+        attributes_json = _canonical_json(dict(attributes or {}))
+    except (TypeError, ValueError) as error:
+        raise RecordValidationError("invalid_attributes", "attributes") from error
     provenance = conn.execute(
         "SELECT subject_id,local_date,tombstone,validation_state FROM source_record_version "
         "WHERE record_version_id=?",
