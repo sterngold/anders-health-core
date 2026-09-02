@@ -50,7 +50,11 @@ def scan_blob(path: str, data: bytes) -> List[Dict[str, Any]]:
 
 
 def _candidate_files(root: Path) -> Iterable[Path]:
-    for path in root.rglob("*"):
+    # Sorted: rglob yields raw directory order, which differs per filesystem and per
+    # CPython version, so an unsorted scan reports the same repository in a different
+    # order on every runner. Callers diff these reports between runs, and the gate's
+    # own tests pin the order, so determinism is part of the contract.
+    for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
         if any(part in SKIP_PARTS for part in path.parts):
