@@ -52,9 +52,7 @@ def _now() -> str:
 
 
 def _canonical_json(value: Any) -> str:
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-    )
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def _payload_hash(payload: Mapping[str, Any]) -> str:
@@ -392,6 +390,10 @@ def validate_envelope(envelope: Mapping[str, Any]) -> None:
         raise RecordValidationError("missing_field", missing[0])
     if not isinstance(envelope["payload"], Mapping):
         raise RecordValidationError("invalid_payload", "payload")
+    try:
+        json.dumps(envelope["payload"], allow_nan=False)
+    except (TypeError, ValueError) as error:
+        raise RecordValidationError("invalid_payload", "payload") from error
     if not isinstance(envelope["source_version"], int) or envelope["source_version"] < 1:
         raise RecordValidationError("invalid_version", "source_version")
     precision = envelope["timestamp_precision"]
@@ -662,10 +664,12 @@ def _normalize_fact(
         raise RecordValidationError("timestamp_not_utc", "event_end_utc")
     if parsed_start is not None and parsed_end is not None and parsed_end < parsed_start:
         raise RecordValidationError("interval_order", "event_end_utc")
+    attribute_values = dict(attributes or {})
     try:
-        attributes_json = _canonical_json(dict(attributes or {}))
+        json.dumps(attribute_values, allow_nan=False)
     except (TypeError, ValueError) as error:
         raise RecordValidationError("invalid_attributes", "attributes") from error
+    attributes_json = _canonical_json(attribute_values)
     provenance = conn.execute(
         "SELECT subject_id,local_date,tombstone,validation_state FROM source_record_version "
         "WHERE record_version_id=?",

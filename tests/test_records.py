@@ -360,7 +360,7 @@ class RecordContractTests(unittest.TestCase):
                 narrative="private free text",
             )
 
-    def test_jsonl_import_reports_literal_inserted_rejected_and_unchanged_counts(self):
+    def test_bulk_imports_quarantine_invalid_payloads_and_report_literal_counts(self):
         path = Path(self.tmp.name) / "records.jsonl"
         good = self.records.synthetic_envelope(self.subject_id, source_record_key="good")
         bad = {"subject_id": self.subject_id, "source_id": "synthetic.json"}
@@ -373,6 +373,41 @@ class RecordContractTests(unittest.TestCase):
         self.assertEqual(1, receipt["inserted"])
         self.assertEqual(1, receipt["unchanged"])
         self.assertEqual(1, receipt["rejected"])
+
+        EXPECTED_NON_FINITE_PAYLOADS = 3
+        non_finite = (
+            ("nan", math.nan),
+            ("positive-infinity", math.inf),
+            ("negative-infinity", -math.inf),
+        )
+        self.assertEqual(EXPECTED_NON_FINITE_PAYLOADS, len(non_finite))
+        page = [self.records.synthetic_envelope(self.subject_id, "finite-page-record")]
+        for label, value in non_finite:
+            page.append(
+                self.records.synthetic_envelope(
+                    self.subject_id,
+                    source_record_key=f"non-finite-payload-{label}",
+                    payload={"metric": "synthetic.measurement", "value": value, "unit": "count"},
+                )
+            )
+        try:
+            outcomes = self.records.import_envelopes(self.conn, page)
+        except Exception as error:
+            self.fail(f"invalid payload escaped quarantine: {type(error).__name__}: {error}")
+        self.assertEqual(
+            ["inserted", "quarantined", "quarantined", "quarantined"],
+            [outcome["status"] for outcome in outcomes],
+        )
+        self.assertEqual(
+            ["invalid_payload", "invalid_payload", "invalid_payload"],
+            [outcome["reason_code"] for outcome in outcomes[1:]],
+        )
+        self.assertEqual(
+            EXPECTED_NON_FINITE_PAYLOADS,
+            self.conn.execute(
+                "SELECT COUNT(*) FROM quarantine_envelope WHERE reason_code='invalid_payload'"
+            ).fetchone()[0],
+        )
 
     def test_csv_import_uses_the_same_append_only_contract(self):
         path = Path(self.tmp.name) / "records.csv"
