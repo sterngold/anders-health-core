@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/anders-health-core/metric-definition.schema.json",
+  "title": "MetricDefinition",
+  "type": "object",
+  "required": ["metric_id", "display_name", "value_kind", "canonical_unit", "percent_representation", "aggregation_rule", "minimum_value", "maximum_value", "measurement_method", "local_day_policy", "definition_version"],
+  "properties": {
+    "metric_id": {"type": "string", "minLength": 1},
+    "display_name": {"type": "string", "minLength": 1},
+    "value_kind": {"type": "string", "enum": ["number", "integer", "text", "category", "boolean"]},
+    "canonical_unit": {"type": ["string", "null"]},
+    "percent_representation": {"type": ["string", "null"], "enum": ["zero_to_one", "zero_to_hundred", null]},
+    "aggregation_rule": {"type": "string", "minLength": 1},
+    "minimum_value": {"type": ["number", "null"]},
+    "maximum_value": {"type": ["number", "null"]},
+    "measurement_method": {"type": ["string", "null"]},
+    "local_day_policy": {"type": "string", "minLength": 1},
+    "definition_version": {"type": "string", "minLength": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"value_kind": {"enum": ["text", "category", "boolean"]}}, "required": ["value_kind"]},
+      "then": {
+        "properties": {
+          "minimum_value": {"type": "null"},
+          "maximum_value": {"type": "null"},
+          "percent_representation": {"type": "null"}
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

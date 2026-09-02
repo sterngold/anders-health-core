@@ -30,3 +30,5 @@ data over a network.
 
 Never submit real health records, real identifiers, source credentials,
 private paths, private hostnames, or screenshots containing personal data.
+The verifier applies one classifier to the working tree and every reachable Git
+blob; database/binary artifacts are rejected unless explicitly named synthetic.

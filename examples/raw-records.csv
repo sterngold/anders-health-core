@@ -1,2 +1,2 @@
-subject_id,source_id,source_record_key,source_version,payload,event_start_utc,event_end_utc,timestamp_precision,source_timezone,offset_minutes,local_date,day_policy_version,source_updated_at,ingested_at,tombstone
-00000000-0000-4000-8000-000000000001,synthetic.json,measurement-1,1,"{""metric"":""synthetic.measurement"",""unit"":""count"",""value"":1.0}",2026-01-01T08:00:00Z,,instant,Etc/UTC,0,2026-01-01,day-v1,2026-01-01T08:00:00Z,2026-01-01T09:00:00Z,false
+subject_id,source_id,source_contract_version,source_record_key,source_version,payload,event_start_utc,event_end_utc,timestamp_precision,source_timezone,offset_minutes,local_date,day_policy_version,source_updated_at,ingested_at,tombstone
+00000000-0000-4000-8000-000000000001,synthetic.json,source-v1,measurement-1,1,"{""metric"":""synthetic.measurement"",""unit"":""count"",""value"":1.0}",2026-01-01T08:00:00Z,,instant,Etc/UTC,0,2026-01-01,day-v1,2026-01-01T08:00:00Z,2026-01-01T09:00:00Z,false

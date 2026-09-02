@@ -17,15 +17,20 @@ classifiers = [
   "Programming Language :: Python :: 3.9",
   "Topic :: Scientific/Engineering :: Information Analysis"
 ]
-dependencies = []
+dependencies = ["jsonschema>=4.18,<5"]
+
+[project.optional-dependencies]
+test = []
 
 [project.scripts]
 anders-health-core = "anders_health_core.cli:main"
 
-[tool.setuptools.package-data]
-anders_health_core = ["migrations/*.sql"]
+[tool.setuptools]
+packages = ["anders_health_core", "anders_health_core.migrations", "anders_health_core.schemas"]
 
-[tool.setuptools.packages.find]
-include = ["anders_health_core*"]
-exclude = ["tests*", "schemas*", "examples*", "docs*", "scripts*"]
-namespaces = false
+[tool.setuptools.package-dir]
+"anders_health_core.schemas" = "schemas"
+
+[tool.setuptools.package-data]
+"anders_health_core.migrations" = ["*.sql"]
+"anders_health_core.schemas" = ["*.json"]

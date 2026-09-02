@@ -1,60 +1,11 @@
 {
-  "SourceManifest": {
-    "source_id": "synthetic.json",
-    "source_type": "file",
-    "display_name": "Synthetic JSON fixture",
-    "capabilities": ["measurement"],
-    "consent_state": "not_required",
-    "timestamp_semantics": "event_interval",
-    "revision_behavior": "monotonic_integer_version",
-    "contract_version": "source-v1"
-  },
-  "RawRecordEnvelope": {
-    "subject_id": "00000000-0000-4000-8000-000000000001",
-    "source_id": "synthetic.json",
-    "source_record_key": "record-1",
-    "source_version": 1,
-    "payload": {"metric": "synthetic.measurement", "value": 1.0, "unit": "count"},
-    "event_start_utc": "2026-01-01T08:00:00Z",
-    "timestamp_precision": "instant",
-    "local_date": "2026-01-01",
-    "day_policy_version": "day-v1",
-    "ingested_at": "2026-01-01T09:00:00Z"
-  },
-  "NormalizedFact": {
-    "fact_id": "00000000-0000-4000-8000-000000000002",
-    "subject_id": "00000000-0000-4000-8000-000000000001",
-    "fact_type": "measurement",
-    "metric_id": "synthetic.measurement",
-    "local_date": "2026-01-01",
-    "numeric_value": 1.0,
-    "unit": "count",
-    "source_record_version_id": "00000000-0000-4000-8000-000000000003",
-    "validation_state": "accepted",
-    "calculation_version": "normalize-v1"
-  },
-  "ContextEvent": {
-    "context_event_id": "00000000-0000-4000-8000-000000000004",
-    "subject_id": "00000000-0000-4000-8000-000000000001",
-    "category": "travel",
-    "starts_on": "2026-01-02"
-  },
-  "QualityIssue": {
-    "issue_id": "00000000-0000-4000-8000-000000000005",
-    "reason_code": "unit_mismatch",
-    "detected_at": "2026-01-01T09:00:00Z",
-    "resolution_state": "open"
-  },
-  "AnalyticsResult": {
-    "result_id": "00000000-0000-4000-8000-000000000006",
-    "result_type": "association",
-    "subject_id": "00000000-0000-4000-8000-000000000001",
-    "status": "early_association",
-    "method_version": "association-v1",
-    "policy_version": "policy-v1",
-    "input_snapshot_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "generated_at": "2026-01-31T09:00:00Z",
-    "paired_count": 7,
-    "claim_type": "observational"
-  }
+  "SourceManifest": {"source_id": "synthetic.json", "source_type": "file", "display_name": "Synthetic JSON fixture", "capabilities": ["measurement"], "consent_state": "not_required", "timestamp_semantics": "event_interval", "revision_behavior": "monotonic_integer_version", "completeness_rule": "expected_records=days in requested period; usable_records=accepted current records in that period", "contract_version": "source-v1"},
+  "RawRecordEnvelope": {"subject_id": "00000000-0000-4000-8000-000000000001", "source_id": "synthetic.json", "source_contract_version": "source-v1", "source_record_key": "record-1", "source_version": 1, "payload": {"metric": "synthetic.measurement", "value": 1.0, "unit": "count"}, "event_start_utc": "2026-01-01T08:00:00Z", "event_end_utc": null, "timestamp_precision": "instant", "source_timezone": "Etc/UTC", "offset_minutes": 0, "local_date": "2026-01-01", "day_policy_version": "day-v1", "source_updated_at": "2026-01-01T08:00:00Z", "ingested_at": "2026-01-01T09:00:00Z", "tombstone": false},
+  "NormalizedFact": {"fact_id": "00000000-0000-4000-8000-000000000002", "subject_id": "00000000-0000-4000-8000-000000000001", "fact_type": "measurement", "metric_id": "synthetic.measurement", "metric_definition_version": "metric-v1", "local_date": "2026-01-01", "numeric_value": 1.0, "unit": "count", "source_record_version_id": "00000000-0000-4000-8000-000000000003", "validation_state": "accepted", "calculation_version": "normalize-v1"},
+  "ContextEvent": {"context_event_id": "00000000-0000-4000-8000-000000000004", "subject_id": "00000000-0000-4000-8000-000000000001", "category": "travel", "starts_on": "2026-01-02"},
+  "QualityIssue": {"issue_id": "00000000-0000-4000-8000-000000000005", "reason_code": "unit_mismatch", "detected_at": "2026-01-01T09:00:00Z", "resolution_state": "open"},
+  "AnalyticsCoverageResult": {"result_id": "00000000-0000-4000-8000-000000000006", "result_type": "coverage", "subject_id": "00000000-0000-4000-8000-000000000001", "status": "partial", "metric_id": "synthetic.measurement", "source_id": "synthetic.json", "period_start": "2026-01-01", "period_end": "2026-01-07", "expected_records": 7, "observed_records": 7, "usable_records": 6, "possible_days": 7, "usable_days": 6, "missing_days": 1, "longest_gap_days": 1, "quarantined_records": 0, "freshest_event_at": "2026-01-07T08:00:00Z", "method_version": "coverage-v1", "policy_version": "coverage-v1", "input_snapshot_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "generated_at": "2026-01-31T09:00:00Z", "exclusions": [{"reason": "missing_local_days", "count": 1}]},
+  "AnalyticsTrendResult": {"result_id": "00000000-0000-4000-8000-000000000007", "result_type": "trend", "subject_id": "00000000-0000-4000-8000-000000000001", "status": "provisional", "metric_id": "synthetic.measurement", "as_of_date": "2026-01-31", "window_days": 7, "baseline_days": 30, "eligible_days": 6, "possible_days": 7, "missing_days": 1, "longest_gap_days": 1, "direction": "stable", "magnitude": 0.0, "epoch_id": null, "method_version": "trend-v1", "policy_version": "trend-v1", "input_snapshot_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "generated_at": "2026-01-31T09:00:00Z", "exclusions": [{"reason": "missing_local_days", "count": 1}]},
+  "AnalyticsAssociationResult": {"result_id": "00000000-0000-4000-8000-000000000008", "result_type": "association", "subject_id": "00000000-0000-4000-8000-000000000001", "status": "early_association", "association_id": "synthetic-association", "exposure_metric_id": "synthetic.exposure", "outcome_metric_id": "synthetic.outcome", "period_start": "2026-01-01", "period_end": "2026-01-07", "lag_days": 1, "paired_count": 7, "possible_pairs": 8, "claim_type": "observational", "effect_method": "theil_sen_median_slope", "effect_value": 0.0, "rank_direction": 0.0, "uncertainty_low": null, "uncertainty_high": null, "method_version": "association-v1", "policy_version": "association-v1", "input_snapshot_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "generated_at": "2026-01-31T09:00:00Z", "exclusions": [{"reason": "ineligible_source", "count": 1}]},
+  "AnalyticsAssessmentChangeResult": {"result_id": "00000000-0000-4000-8000-000000000009", "result_type": "assessment_change", "subject_id": "00000000-0000-4000-8000-000000000001", "status": "change", "metric_id": "synthetic.assessment", "protocol_id": "synthetic-protocol", "compatible_session_count": 2, "possible_sessions": 3, "baseline_date": "2026-01-01", "latest_date": "2026-01-31", "baseline_value": 1.0, "latest_value": 2.0, "delta_from_baseline": 1.0, "direction": "up", "method_version": "assessment-v1", "policy_version": "assessment-v1", "input_snapshot_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "generated_at": "2026-01-31T09:00:00Z", "exclusions": [{"reason": "incompatible_or_incomplete_session", "count": 1}]}
 }

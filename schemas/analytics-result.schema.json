@@ -2,19 +2,35 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://example.invalid/anders-health-core/analytics-result.schema.json",
   "title": "AnalyticsResult",
-  "type": "object",
-  "required": ["result_id", "result_type", "subject_id", "status", "method_version", "policy_version", "input_snapshot_hash", "generated_at"],
-  "properties": {
-    "result_id": {"type": "string", "format": "uuid"},
-    "result_type": {"type": "string", "enum": ["coverage", "trend", "association", "assessment_change"]},
-    "subject_id": {"type": "string", "format": "uuid"},
-    "status": {"type": "string"},
-    "method_version": {"type": "string"},
-    "policy_version": {"type": "string"},
-    "input_snapshot_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
-    "generated_at": {"type": "string", "format": "date-time"},
-    "paired_count": {"type": "integer", "minimum": 0},
-    "claim_type": {"type": "string", "enum": ["observational"]}
-  },
-  "additionalProperties": false
+  "$defs": {"exclusion": {"type": "object", "required": ["reason"], "properties": {"reason": {"type": "string", "minLength": 1}, "count": {"type": "integer", "minimum": 1}, "from_epoch_id": {"type": "string"}, "to_epoch_id": {"type": "string"}}, "additionalProperties": false}},
+  "oneOf": [
+    {
+      "title": "CoverageResult", "type": "object",
+      "required": ["result_id", "result_type", "subject_id", "status", "metric_id", "source_id", "period_start", "period_end", "expected_records", "observed_records", "usable_records", "possible_days", "usable_days", "missing_days", "longest_gap_days", "quarantined_records", "method_version", "policy_version", "input_snapshot_hash", "generated_at", "exclusions"],
+      "properties": {
+        "result_id": {"type": "string", "format": "uuid"}, "result_type": {"const": "coverage"}, "subject_id": {"type": "string", "format": "uuid"}, "status": {"type": "string"}, "metric_id": {"type": ["string", "null"]}, "source_id": {"type": ["string", "null"]}, "period_start": {"type": "string", "format": "date"}, "period_end": {"type": "string", "format": "date"}, "expected_records": {"type": ["integer", "null"], "minimum": 0}, "observed_records": {"type": "integer", "minimum": 0}, "usable_records": {"type": "integer", "minimum": 0}, "possible_days": {"type": "integer", "minimum": 0}, "usable_days": {"type": "integer", "minimum": 0}, "missing_days": {"type": "integer", "minimum": 0}, "longest_gap_days": {"type": "integer", "minimum": 0}, "quarantined_records": {"type": "integer", "minimum": 0}, "freshest_event_at": {"type": ["string", "null"], "format": "date-time"}, "method_version": {"type": "string", "minLength": 1}, "policy_version": {"type": "string", "minLength": 1}, "input_snapshot_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "generated_at": {"type": "string", "format": "date-time"}, "exclusions": {"type": "array", "items": {"$ref": "#/$defs/exclusion"}}
+      }, "additionalProperties": false
+    },
+    {
+      "title": "TrendResult", "type": "object",
+      "required": ["result_id", "result_type", "subject_id", "status", "metric_id", "as_of_date", "window_days", "baseline_days", "eligible_days", "possible_days", "missing_days", "longest_gap_days", "direction", "magnitude", "epoch_id", "method_version", "policy_version", "input_snapshot_hash", "generated_at", "exclusions"],
+      "properties": {
+        "result_id": {"type": "string", "format": "uuid"}, "result_type": {"const": "trend"}, "subject_id": {"type": "string", "format": "uuid"}, "status": {"type": "string"}, "metric_id": {"type": "string", "minLength": 1}, "as_of_date": {"type": "string", "format": "date"}, "window_days": {"type": "integer", "minimum": 1}, "baseline_days": {"type": ["integer", "null"], "minimum": 1}, "eligible_days": {"type": "integer", "minimum": 0}, "possible_days": {"type": "integer", "minimum": 0}, "missing_days": {"type": "integer", "minimum": 0}, "longest_gap_days": {"type": ["integer", "null"], "minimum": 0}, "direction": {"type": ["string", "null"]}, "magnitude": {"type": ["number", "null"]}, "epoch_id": {"type": ["string", "null"]}, "method_version": {"type": "string", "minLength": 1}, "policy_version": {"type": "string", "minLength": 1}, "input_snapshot_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "generated_at": {"type": "string", "format": "date-time"}, "exclusions": {"type": "array", "items": {"$ref": "#/$defs/exclusion"}}
+      }, "additionalProperties": false
+    },
+    {
+      "title": "AssociationResult", "type": "object",
+      "required": ["result_id", "result_type", "subject_id", "status", "association_id", "exposure_metric_id", "outcome_metric_id", "period_start", "period_end", "lag_days", "paired_count", "possible_pairs", "claim_type", "effect_method", "effect_value", "rank_direction", "uncertainty_low", "uncertainty_high", "method_version", "policy_version", "input_snapshot_hash", "generated_at", "exclusions"],
+      "properties": {
+        "result_id": {"type": "string", "format": "uuid"}, "result_type": {"const": "association"}, "subject_id": {"type": "string", "format": "uuid"}, "status": {"type": "string"}, "association_id": {"type": "string", "minLength": 1}, "exposure_metric_id": {"type": "string", "minLength": 1}, "outcome_metric_id": {"type": "string", "minLength": 1}, "period_start": {"type": "string", "format": "date"}, "period_end": {"type": "string", "format": "date"}, "lag_days": {"type": "integer", "minimum": 0}, "paired_count": {"type": "integer", "minimum": 0}, "possible_pairs": {"type": "integer", "minimum": 0}, "claim_type": {"const": "observational"}, "effect_method": {"type": ["string", "null"]}, "effect_value": {"type": ["number", "null"]}, "rank_direction": {"type": ["number", "null"]}, "uncertainty_low": {"type": ["number", "null"]}, "uncertainty_high": {"type": ["number", "null"]}, "method_version": {"type": "string", "minLength": 1}, "policy_version": {"type": "string", "minLength": 1}, "input_snapshot_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "generated_at": {"type": "string", "format": "date-time"}, "exclusions": {"type": "array", "items": {"$ref": "#/$defs/exclusion"}}
+      }, "additionalProperties": false
+    },
+    {
+      "title": "AssessmentChangeResult", "type": "object",
+      "required": ["result_id", "result_type", "subject_id", "status", "metric_id", "protocol_id", "compatible_session_count", "possible_sessions", "baseline_date", "latest_date", "baseline_value", "latest_value", "delta_from_baseline", "direction", "method_version", "policy_version", "input_snapshot_hash", "generated_at", "exclusions"],
+      "properties": {
+        "result_id": {"type": "string", "format": "uuid"}, "result_type": {"const": "assessment_change"}, "subject_id": {"type": "string", "format": "uuid"}, "status": {"type": "string"}, "metric_id": {"type": "string", "minLength": 1}, "protocol_id": {"type": "string", "minLength": 1}, "compatible_session_count": {"type": "integer", "minimum": 0}, "possible_sessions": {"type": "integer", "minimum": 0}, "baseline_date": {"type": ["string", "null"], "format": "date"}, "latest_date": {"type": ["string", "null"], "format": "date"}, "baseline_value": {"type": ["number", "null"]}, "latest_value": {"type": ["number", "null"]}, "delta_from_baseline": {"type": ["number", "null"]}, "direction": {"type": ["string", "null"]}, "method_version": {"type": "string", "minLength": 1}, "policy_version": {"type": "string", "minLength": 1}, "input_snapshot_hash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "generated_at": {"type": "string", "format": "date-time"}, "exclusions": {"type": "array", "items": {"$ref": "#/$defs/exclusion"}}
+      }, "additionalProperties": false
+    }
+  ]
 }

@@ -67,7 +67,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "init":
         subject_id = database.initialize(args.db)
-        _print({"schema_version": 2, "subject_id": subject_id})
+        with database.connect(args.db) as conn:
+            version = database.schema_version(conn)
+        _print({"schema_version": version, "subject_id": subject_id})
         return 0
     if args.command == "demo":
         _print(demo.build_demo(args.db))
@@ -75,7 +77,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.command == "verify":
         result = _verify(args.db)
         _print(result)
-        return 0 if result["schema_version"] == 2 else 1
+        return 0 if result["schema_version"] == 5 else 1
     if args.command in {"register-source", "register-metric"}:
         payload = json.loads(args.input.read_text(encoding="utf-8"))
         contract_name = "SourceManifest" if args.command == "register-source" else "MetricDefinition"

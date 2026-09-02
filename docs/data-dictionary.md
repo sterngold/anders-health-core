@@ -18,6 +18,9 @@ only supported database bootstrap.
 | `normalized_fact` | One accepted fact | Domain-specific fact linked to exactly one raw record version. |
 | `context_event` | One typed interval | Illness, injury, travel, medication change, device replacement, or source change. |
 | `analysis_policy` | One versioned rule set | Cadence and eligibility parameters without personal targets. |
+| `assessment_protocol` / `assessment_required_metric` | One protocol version and its required metrics | Defines compatible complete sessions. |
+| `assessment_attempt` / `assessment_session` | One metric attempt and one daily protocol session | Preserves complete versus partial evidence. |
+| `association_definition` | One predeclared relationship version | Fixes pairing, coverage, effect method, and observational claim type. |
 
 `current_source_record` selects the newest accepted, non-tombstoned version for
 each real source key. It excludes revoked sources. Same-time records with
@@ -48,4 +51,5 @@ is stored as zero.
 | `assessment_change_result` | Comparable session count, baseline, latest value, change, and baseline/change/trend state. |
 | `derivation_receipt` | Input hash/count, output count, method, policy, exclusions, and generation time. |
 
-The core has no recommendation table and no presentation views.
+The core has no hosted store, recommendation table, or presentation views;
+optional hosted capture must terminate outside the canonical SQLite boundary.

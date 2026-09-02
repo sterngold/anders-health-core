@@ -8,6 +8,7 @@
   "timestamp_semantics": "event_interval",
   "canonical_timezone": "Etc/UTC",
   "revision_behavior": "monotonic_integer_version",
+  "completeness_rule": "expected_records=days in requested period; usable_records=accepted current records in that period",
   "license_reference": "CC0 synthetic fixture",
   "contract_version": "source-v1"
 }

@@ -3,6 +3,7 @@ import csv
 import json
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 
 
@@ -35,6 +36,19 @@ class RecordContractTests(unittest.TestCase):
             2,
             self.conn.execute("SELECT COUNT(*) FROM source_record_version").fetchone()[0],
         )
+
+    def test_source_registration_persists_an_explicit_completeness_rule(self):
+        manifest = self.records.synthetic_source_manifest()
+        self.assertEqual(
+            "expected_records=days in requested period; usable_records=accepted current records in that period",
+            manifest["completeness_rule"],
+        )
+        self.records.register_source(self.conn, manifest)
+        stored = self.conn.execute(
+            "SELECT completeness_rule FROM source_registry WHERE source_id=?",
+            ("synthetic.json",),
+        ).fetchone()[0]
+        self.assertEqual(manifest["completeness_rule"], stored)
 
     def test_new_version_supersedes_without_destroying_lineage(self):
         first = self.records.synthetic_envelope(self.subject_id, source_record_key="a")
@@ -169,6 +183,8 @@ class RecordContractTests(unittest.TestCase):
             {
                 "timestamp_precision": "instant",
                 "event_start_utc": "2026-03-29T00:30:00Z",
+                "source_updated_at": "2026-03-29T00:30:00Z",
+                "ingested_at": "2026-03-29T01:00:00Z",
                 "offset_minutes": 60,
                 "local_date": "2026-03-29",
                 "source_timezone": "Europe/Amsterdam",
@@ -257,6 +273,229 @@ class RecordContractTests(unittest.TestCase):
         self.assertEqual(
             {"pulled": 1, "inserted": 0, "unchanged": 0, "rejected": 1}, receipt
         )
+
+    def test_immutable_source_and_metric_versions_coexist_and_rewrites_fail(self):
+        source_v1 = self.records.synthetic_source_manifest()
+        source_v2 = {**source_v1, "contract_version": "source-v2", "display_name": "Synthetic fixture v2"}
+        metric_v1 = self.records.synthetic_metric_definition()
+        metric_v2 = {**metric_v1, "definition_version": "metric-v2", "display_name": "Synthetic measurement v2"}
+        self.records.register_source(self.conn, source_v2)
+        self.records.register_metric(self.conn, metric_v2)
+        self.assertEqual(2, self.conn.execute("SELECT COUNT(*) FROM source_contract_version").fetchone()[0])
+        self.assertEqual(2, self.conn.execute("SELECT COUNT(*) FROM metric_definition_version").fetchone()[0])
+        with self.assertRaisesRegex(self.records.RecordValidationError, "source_contract_version_conflict"):
+            self.records.register_source(self.conn, {**source_v1, "display_name": "rewritten"})
+        with self.assertRaisesRegex(self.records.RecordValidationError, "metric_definition_version_conflict"):
+            self.records.register_metric(self.conn, {**metric_v1, "display_name": "rewritten"})
+        stored = self.conn.execute(
+            "SELECT manifest_json FROM source_contract_version WHERE source_id=? AND contract_version=?",
+            ("synthetic.json", "source-v1"),
+        ).fetchone()[0]
+        self.assertEqual(source_v1, json.loads(stored))
+
+    def test_semantically_identical_migrated_version_serialization_is_not_a_rewrite(self):
+        manifest = self.records.synthetic_source_manifest()
+        metric = self.records.synthetic_metric_definition()
+        self.conn.execute("DROP TRIGGER source_contract_version_no_update")
+        self.conn.execute(
+            "UPDATE source_contract_version SET manifest_json=? WHERE source_id=? AND contract_version=?",
+            (json.dumps(manifest, indent=2), manifest["source_id"], manifest["contract_version"]),
+        )
+        self.conn.executescript(
+            "CREATE TRIGGER source_contract_version_no_update "
+            "BEFORE UPDATE ON source_contract_version BEGIN "
+            "SELECT RAISE(ABORT, 'source contract versions are immutable'); END;"
+        )
+        self.records.register_source(self.conn, manifest)
+        self.conn.execute("DROP TRIGGER metric_definition_version_no_update")
+        self.conn.execute(
+            "UPDATE metric_definition_version SET definition_json=? WHERE metric_id=? AND definition_version=?",
+            (json.dumps(metric, indent=2), metric["metric_id"], metric["definition_version"]),
+        )
+        self.conn.executescript(
+            "CREATE TRIGGER metric_definition_version_no_update "
+            "BEFORE UPDATE ON metric_definition_version BEGIN "
+            "SELECT RAISE(ABORT, 'metric definition versions are immutable'); END;"
+        )
+        self.records.register_metric(self.conn, metric)
+        self.assertEqual(1, self.conn.execute(
+            "SELECT COUNT(*) FROM source_contract_version"
+        ).fetchone()[0])
+        self.assertEqual(1, self.conn.execute(
+            "SELECT COUNT(*) FROM metric_definition_version"
+        ).fetchone()[0])
+
+    def test_raw_identity_is_subject_scoped_and_fact_provenance_is_derived(self):
+        second_subject = "00000000-0000-4000-8000-000000000002"
+        self.conn.execute(
+            "INSERT INTO subject(subject_id,created_at) VALUES (?,?)",
+            (second_subject, "2026-01-01T00:00:00Z"),
+        )
+        first = self.records.import_envelope(
+            self.conn, self.records.synthetic_envelope(self.subject_id, source_record_key="shared")
+        )
+        second = self.records.import_envelope(
+            self.conn, self.records.synthetic_envelope(second_subject, source_record_key="shared")
+        )
+        self.assertEqual(2, self.conn.execute(
+            "SELECT COUNT(*) FROM current_source_record WHERE source_record_key='shared'"
+        ).fetchone()[0])
+        fact = self.records.normalize_numeric_fact(
+            self.conn,
+            source_record_version_id=second["record_version_id"],
+            metric_id="synthetic.measurement",
+            value=1.0,
+            unit="count",
+        )
+        self.assertEqual("accepted", fact["status"])
+        row = self.conn.execute(
+            "SELECT subject_id,local_date,metric_definition_version FROM normalized_fact WHERE fact_id=?",
+            (fact["fact_id"],),
+        ).fetchone()
+        self.assertEqual((second_subject, "2026-01-01", "metric-v1"), tuple(row))
+        self.assertNotEqual(first["record_version_id"], second["record_version_id"])
+
+    def test_normalization_rejects_literal_bad_provenance_classes(self):
+        current = self.records.import_envelope(
+            self.conn, self.records.synthetic_envelope(self.subject_id, source_record_key="current")
+        )
+        old = self.records.import_envelope(
+            self.conn, self.records.synthetic_envelope(self.subject_id, source_record_key="superseded")
+        )
+        self.records.import_envelope(
+            self.conn,
+            self.records.synthetic_envelope(
+                self.subject_id, source_record_key="superseded", source_version=2
+            ),
+        )
+        tombstone = self.records.import_envelope(
+            self.conn,
+            self.records.synthetic_envelope(self.subject_id, source_record_key="deleted", tombstone=True),
+        )
+        quarantined = self.records.import_envelope(
+            self.conn, self.records.synthetic_envelope(self.subject_id, source_record_key="quarantined")
+        )
+        self.conn.execute(
+            "UPDATE source_record_version SET validation_state='quarantined' WHERE record_version_id=?",
+            (quarantined["record_version_id"],),
+        )
+        common = {"metric_id": "synthetic.measurement", "value": 1.0, "unit": "count"}
+        results = [
+            self.records.normalize_numeric_fact(
+                self.conn, source_record_version_id=current["record_version_id"],
+                subject_id="00000000-0000-4000-8000-000000000099", **common
+            ),
+            self.records.normalize_numeric_fact(
+                self.conn, source_record_version_id=current["record_version_id"],
+                local_date="2026-01-02", **common
+            ),
+            self.records.normalize_numeric_fact(
+                self.conn, source_record_version_id=old["record_version_id"], **common
+            ),
+            self.records.normalize_numeric_fact(
+                self.conn, source_record_version_id=tombstone["record_version_id"], **common
+            ),
+            self.records.normalize_numeric_fact(
+                self.conn, source_record_version_id=quarantined["record_version_id"], **common
+            ),
+        ]
+        self.assertEqual(
+            Counter({
+                "provenance_subject_mismatch": 1,
+                "provenance_date_mismatch": 1,
+                "superseded_provenance": 1,
+                "tombstoned_provenance": 1,
+                "quarantined_provenance": 1,
+            }),
+            Counter(result["reason_code"] for result in results),
+        )
+        self.assertTrue(all(result["status"] == "quarantined" for result in results))
+        self.assertEqual(0, self.conn.execute("SELECT COUNT(*) FROM normalized_fact").fetchone()[0])
+
+    def test_timestamp_controls_accept_dst_and_travel_and_quarantine_bad_envelopes(self):
+        good_cases = (
+            ("winter", "2026-01-15T08:00:00Z", "Europe/Amsterdam", 60, "2026-01-15"),
+            ("summer", "2026-07-15T08:00:00Z", "Europe/Amsterdam", 120, "2026-07-15"),
+            ("travel", "2026-07-15T08:00:00Z", "America/New_York", -240, "2026-07-15"),
+        )
+        self.assertEqual(3, len(good_cases))
+        for key, event_at, zone, offset, local_day in good_cases:
+            envelope = self.records.synthetic_envelope(self.subject_id, source_record_key=key)
+            envelope.update({
+                "event_start_utc": event_at,
+                "source_timezone": zone,
+                "offset_minutes": offset,
+                "local_date": local_day,
+                "source_updated_at": event_at,
+                "ingested_at": "2026-07-15T09:00:00Z" if key != "winter" else "2026-01-15T09:00:00Z",
+            })
+            self.assertEqual("inserted", self.records.import_envelope(self.conn, envelope)["status"])
+
+        valid_interval = self.records.synthetic_envelope(self.subject_id, "valid-interval")
+        valid_interval.update({
+            "timestamp_precision": "interval",
+            "event_end_utc": "2026-01-01T09:04:00Z",
+        })
+        self.assertEqual("inserted", self.records.import_envelope(self.conn, valid_interval)["status"])
+
+        bad_cases = []
+        interval_missing = self.records.synthetic_envelope(self.subject_id, "interval-missing")
+        interval_missing["timestamp_precision"] = "interval"
+        bad_cases.append(interval_missing)
+        interval_reversed = self.records.synthetic_envelope(self.subject_id, "interval-reversed")
+        interval_reversed.update({"timestamp_precision": "interval", "event_end_utc": "2026-01-01T07:00:00Z"})
+        bad_cases.append(interval_reversed)
+        for key, field in (
+            ("malformed-event", "event_start_utc"),
+            ("malformed-end", "event_end_utc"),
+            ("malformed-ingested", "ingested_at"),
+            ("malformed-updated", "source_updated_at"),
+        ):
+            envelope = self.records.synthetic_envelope(self.subject_id, key)
+            if field == "event_end_utc":
+                envelope["timestamp_precision"] = "interval"
+            envelope[field] = "not-a-timestamp"
+            bad_cases.append(envelope)
+        mismatch = self.records.synthetic_envelope(self.subject_id, "offset-mismatch")
+        mismatch.update({"source_timezone": "Europe/Amsterdam", "offset_minutes": 120})
+        bad_cases.append(mismatch)
+        future = self.records.synthetic_envelope(self.subject_id, "future")
+        future["event_start_utc"] = "2026-01-01T09:06:00Z"
+        bad_cases.append(future)
+        future_interval = self.records.synthetic_envelope(self.subject_id, "future-interval")
+        future_interval.update({
+            "timestamp_precision": "interval",
+            "event_end_utc": "2026-01-01T09:06:00Z",
+        })
+        bad_cases.append(future_interval)
+        future_date = self.records.synthetic_envelope(self.subject_id, "future-date")
+        future_date.update({"timestamp_precision": "date", "event_start_utc": None,
+                            "local_date": "2099-01-01"})
+        bad_cases.append(future_date)
+        unanchored = self.records.synthetic_envelope(self.subject_id, "unanchored")
+        unanchored.update({"source_timezone": None, "offset_minutes": None})
+        bad_cases.append(unanchored)
+        self.assertEqual(11, len(bad_cases))
+        path = Path(self.tmp.name) / "bad-timestamps.jsonl"
+        path.write_text("\n".join(json.dumps(row) for row in bad_cases) + "\n", encoding="utf-8")
+        self.assertEqual(
+            {"pulled": 11, "inserted": 0, "unchanged": 0, "rejected": 11},
+            self.records.import_jsonl(self.conn, path),
+        )
+        reason_counts = Counter({row[0]: row[1] for row in self.conn.execute(
+            "SELECT reason_code,COUNT(*) FROM quarantine_envelope GROUP BY reason_code"
+        )})
+        self.assertEqual(Counter({
+            "invalid_timestamp": 4,
+            "interval_end_required": 1,
+            "interval_order": 1,
+            "offset_timezone_mismatch": 1,
+            "future_event": 3,
+            "local_date_authority_required": 1,
+        }), reason_counts)
+        self.assertEqual(0, self.conn.execute(
+            "SELECT COUNT(*) FROM source_record_version WHERE source_record_key LIKE 'malformed-%'"
+        ).fetchone()[0])
 
 
 if __name__ == "__main__":

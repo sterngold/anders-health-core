@@ -3,7 +3,7 @@
   "$id": "https://example.invalid/anders-health-core/source-manifest.schema.json",
   "title": "SourceManifest",
   "type": "object",
-  "required": ["source_id", "source_type", "display_name", "capabilities", "consent_state", "timestamp_semantics", "revision_behavior", "contract_version"],
+  "required": ["source_id", "source_type", "display_name", "capabilities", "consent_state", "timestamp_semantics", "revision_behavior", "completeness_rule", "contract_version"],
   "properties": {
     "source_id": {"type": "string", "minLength": 1},
     "source_type": {"type": "string", "enum": ["file", "device", "api", "manual"]},
@@ -14,6 +14,7 @@
     "timestamp_semantics": {"type": "string", "enum": ["date_only", "instant", "event_interval"]},
     "canonical_timezone": {"type": ["string", "null"]},
     "revision_behavior": {"type": "string", "minLength": 1},
+    "completeness_rule": {"type": "string", "minLength": 1},
     "license_reference": {"type": ["string", "null"]},
     "contract_version": {"type": "string", "minLength": 1}
   },

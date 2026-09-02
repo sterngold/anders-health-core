@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List
 
-from . import database, records
+from . import analytics, database, records
 
 
 METRICS = (
@@ -104,6 +104,54 @@ def build_demo(path: Path) -> Dict[str, Any]:
             category="device_replacement",
             starts_on="2026-01-06",
         )
+        created = "2026-01-01T00:00:00Z"
+        conn.execute("INSERT OR IGNORE INTO assessment_protocol VALUES (?,?,?,?,?)",
+                     ("demo-capacity", "v1", "grip", "same-version", created))
+        conn.execute("INSERT OR IGNORE INTO assessment_required_metric VALUES (?,?,?)",
+                     ("demo-capacity", "v1", "demo.grip_strength"))
+        sessions = (("s1", "2026-01-01", "complete", 32.0),
+                    ("s2", "2026-01-02", "complete", 33.0),
+                    ("s3", "2026-01-03", "partial", 34.0))
+        for session_id, local_day, state, value in sessions:
+            snapshot = analytics.input_snapshot_hash([{"metric_id": "demo.grip_strength",
+                                                        "local_date": local_day, "value": value}])
+            conn.execute("INSERT OR IGNORE INTO assessment_attempt VALUES (?,?,?,?,?,?,?,?,?)",
+                         (f"attempt-{session_id}", subject_id, "demo-capacity", "v1",
+                          "demo.grip_strength", "demo-metric-v1", local_day, value, created))
+            conn.execute("INSERT OR IGNORE INTO assessment_session VALUES (?,?,?,?,?,?,?,?)",
+                         (session_id, subject_id, "demo-capacity", "v1", local_day,
+                          "partial", snapshot, created))
+            if state == "complete":
+                conn.execute("UPDATE assessment_session SET completeness_state='complete' WHERE session_id=?",
+                             (session_id,))
+        conn.execute("INSERT OR IGNORE INTO association_definition VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                     ("demo-fiber-sleep", "v1", "demo.fiber", "demo-metric-v1",
+                      "demo.sleep_score", "demo-metric-v1", '[]', "lag_days:0",
+                      '{"minimum_pairs":7}', "continuous", "theil_sen_median_slope",
+                      "observational", created))
+        common = {"subject_id": subject_id, "method_version": "demo-v1",
+                  "policy_version": "demo-policy-v1"}
+        conn.execute("INSERT OR IGNORE INTO source_epoch VALUES (?,?,?,?,?,?,?,?,?)",
+                     ("demo-epoch-v1", subject_id, "synthetic.json", "demo.sleep_score",
+                      "2026-01-01T00:00:00Z", None, "initial", 0, created))
+        rows = [{"date": f"2026-01-0{day}", "event_at": f"2026-01-0{day}T08:00:00Z",
+                 "value": day, "usable": True, "epoch_id": "demo-epoch-v1",
+                 "comparable_to_previous": False}
+                for day in range(1, 8)]
+        analytics.derive_and_persist_coverage(
+            conn, **common, metric_id="demo.fiber", start=start,
+            end=start + timedelta(days=6), input_rows=rows)
+        analytics.derive_and_persist_trend(
+            conn, **common, metric_id="demo.sleep_score", as_of=start + timedelta(days=6),
+            window_days=7, baseline_days=7, input_rows=rows)
+        analytics.derive_and_persist_association(
+            conn, **common, association_id="demo-fiber-sleep@v1", start=start,
+            period_start=start, period_end=start + timedelta(days=6),
+            input_rows=[{"exposure": day, "outcome": day * 2,
+                         "exposure_date": f"2026-01-0{day}",
+                         "outcome_date": f"2026-01-0{day}"} for day in range(1, 8)])
+        analytics.derive_and_persist_assessment_change(
+            conn, **common, metric_id="demo.grip_strength", protocol_id="demo-capacity@v1")
         return {
             "subject_id": subject_id,
             "raw_versions": conn.execute("SELECT COUNT(*) FROM source_record_version").fetchone()[0],

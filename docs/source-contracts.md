@@ -10,13 +10,14 @@ Every source declares:
 - date-only, instant, or event-interval timestamp semantics;
 - canonical timezone only when the source genuinely supplies one;
 - correction and deletion behaviour;
+- the explicit expected-versus-usable `completeness_rule`;
 - contract version and licensing reference.
 
 Credentials and external account identifiers are not manifest fields.
 
 ## Raw record envelope
 
-The deduplication key is `(source_id, source_record_key, source_version)`.
+The deduplication key is `(subject_id, source_id, source_record_key, source_version)`.
 Metric and timestamp are never a global uniqueness key.
 
 Each version includes a canonical payload hash, source timestamps, ingestion
@@ -39,14 +40,15 @@ Percent values explicitly declare whether they use 0–1 or 0–100 representati
 Device, calibration, method, and source changes create `source_epoch` rows.
 Cross-epoch trends are excluded unless comparability is explicitly established.
 
-## Generic files
+## Public source families
 
-`examples/raw-records.jsonl` and `examples/raw-records.csv` show the portable
-one-shot contract. They contain only synthetic identifiers and values.
+| Family | Contract and completeness rule |
+| --- | --- |
+| Synthetic JSON/CSV | Portable one-shot envelope; accepted, rejected, unchanged, and conflict counts reconcile to input rows. |
+| HealthKit | Quantity, category, and workout records remain distinct; completeness is reported by granted type and date coverage. |
+| Oura | Session intervals, revisions, units, and epochs are retained; expected versus observed days follows declared cadence. |
+| Withings | Measurements use versioned unit maps and source keys; same-time distinct records remain distinct. |
+| Trainer spreadsheet | Rows require stable keys, revision/timezone rules, and explicit epochs; proprietary layouts stay private. |
 
-## Deferred vendor adapters
-
-HealthKit, Oura, Withings, and trainer spreadsheets are documented source
-families, not live Phase 1 connectors. Future adapters must translate native
-records into this contract without changing the contract's lineage, time,
-revision, consent, or unit rules.
+Only the synthetic JSON/CSV adapters run in Phase 1. Other families must map
+into this contract without changing lineage, time, consent, unit, or completeness rules.

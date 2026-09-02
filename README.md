@@ -29,7 +29,7 @@ See [DISCLAIMER.md](DISCLAIMER.md) before using the software with health data.
 
 ## Quick start
 
-Python 3.9 or newer and SQLite are sufficient; runtime dependencies are zero.
+Python 3.9 or newer, SQLite, and the declared `jsonschema` dependency are required.
 
 ```sh
 python3 -m anders_health_core.cli demo --db demo.db
@@ -38,7 +38,8 @@ python3 -m tests.run
 ```
 
 The demo contains exactly 42 synthetic raw versions, 42 normalized facts, six
-metrics, and two typed context events. It is safe to inspect and delete.
+metrics, two context events, one of each analytical result, four receipts, and
+three assessment sessions (two complete and one partial).
 
 To initialize an empty installation:
 
@@ -82,5 +83,7 @@ between quantity, category, and workout data described by
 Phase 1 ends when data contracts and analytics are reproducible. It deliberately
 does not include live connectors, scheduling, cloud persistence, APIs,
 recommendation selection, nudges, or frontend design.
+SQLite is the canonical store. An optional hosted capture service may submit the
+same validated envelopes, but remains a private external adapter, not this core.
 
 Licensed under the [MIT License](LICENSE).

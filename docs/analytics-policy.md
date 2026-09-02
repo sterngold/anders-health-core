@@ -11,6 +11,8 @@ or select recommendations.
 - Device and method epochs are analysed separately unless declared comparable.
 - Context events remain visible as possible confounders.
 - Associations are predeclared; the core does not search all metric pairs.
+- Each persisted result is paired transactionally with a derivation receipt;
+  deterministic input snapshots reproduce result IDs, receipt IDs, and hashes.
 
 ## Windows and eligibility
 
@@ -20,7 +22,7 @@ or select recommendations.
 | Food historical context | Use 30 days only when observations span at least three weeks. |
 | Food stale state | No current interpretation after more than seven days without usable data. |
 | Sleep | Seven-night immediate window against a 30-day baseline. |
-| Weight | Seven-day pattern; body composition remains separate monthly context. |
+| Weight | Seven-day smooth and 30-day direction; body composition remains separate monthly context. |
 | Training | Weekly cadence; target values are private runtime configuration. |
 | Capacity | First compatible session is baseline, second permits change, third permits trend. |
 | Food to sleep | At least seven food-day/next-sleep pairs. |

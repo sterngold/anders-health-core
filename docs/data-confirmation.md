@@ -15,14 +15,15 @@ Status values are `confirmed`, `limited`, `missing`, or `blocked`.
 
 ## Phase 1 controls
 
-- 38 tests are required literally; discovery fails if the denominator changes.
+- 64 tests are required literally; discovery fails if the denominator changes.
 - Known-good and known-bad fixtures cover missing versus zero, correction,
   tombstone, same-time samples, source revocation, unit conversion, date-only
   records, DST-capable offsets, context-event privacy, and deterministic receipts.
 - The demo rebuild has literal denominators: 42 raw versions, 42 facts, six
-  metrics, and two context events.
+  metrics, two contexts, four analytical results, four receipts, and three sessions.
 - Privacy scans reject private home paths, private keys, JWT-shaped values, and
-  common embedded API-key forms.
+  common embedded API-key forms, identifiers, health-record markers, and
+  non-synthetic database/binary artifacts in both current files and all Git blobs.
 
 Private production-source confirmation is deliberately not copied into this
 public repository. It belongs to the owning private overlay and may report only
