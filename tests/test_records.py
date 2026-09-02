@@ -37,6 +37,170 @@ class RecordContractTests(unittest.TestCase):
             self.conn.execute("SELECT COUNT(*) FROM source_record_version").fetchone()[0],
         )
 
+    def test_transaction_ownership_and_interval_text_fact(self):
+        EXPECTED_TRANSACTION_ARMS = 4
+        completed_arms = 0
+
+        with self.subTest("default single-record import commits"):
+            envelope = self.records.synthetic_envelope(
+                self.subject_id, source_record_key="default-commit"
+            )
+            conn = self.database.connect(self.db_path)
+            try:
+                self.assertEqual("inserted", self.records.import_envelope(conn, envelope)["status"])
+            finally:
+                conn.close()
+            with self.database.connect(self.db_path) as conn:
+                self.assertEqual(
+                    1,
+                    conn.execute(
+                        "SELECT COUNT(*) FROM source_record_version WHERE source_record_key=?",
+                        ("default-commit",),
+                    ).fetchone()[0],
+                )
+            completed_arms += 1
+
+        with self.subTest("commit false rolls back with caller"):
+            first = self.records.synthetic_envelope(
+                self.subject_id, source_record_key="caller-rollback-1"
+            )
+            second = self.records.synthetic_envelope(
+                self.subject_id, source_record_key="caller-rollback-2"
+            )
+            with self.database.connect(self.db_path) as conn:
+                conn.execute("BEGIN")
+                outcomes = self.records.import_envelopes(conn, [first, second], commit=False)
+                self.records.normalize_fact(
+                    conn,
+                    source_record_version_id=outcomes[0]["record_version_id"],
+                    metric_id="synthetic.measurement",
+                    fact_type="sleep_session",
+                    text_value="long_sleep",
+                    event_start_utc="2026-01-01T22:00:00Z",
+                    event_end_utc="2026-01-02T06:00:00Z",
+                    attributes={"main": True},
+                    calculation_version="normalize-v2",
+                    commit=False,
+                )
+                conn.rollback()
+                self.assertEqual(
+                    0,
+                    conn.execute(
+                        "SELECT COUNT(*) FROM source_record_version "
+                        "WHERE source_record_key LIKE 'caller-rollback-%'"
+                    ).fetchone()[0],
+                )
+            completed_arms += 1
+
+        with self.subTest("second normalization error rolls back page"):
+            first = self.records.synthetic_envelope(
+                self.subject_id, source_record_key="failed-page-1"
+            )
+            second = self.records.synthetic_envelope(
+                self.subject_id, source_record_key="failed-page-2"
+            )
+            with self.database.connect(self.db_path) as conn:
+                conn.execute("BEGIN")
+                try:
+                    with self.assertRaises(self.records.RecordValidationError):
+                        outcomes = self.records.import_envelopes(
+                            conn, [first, second], commit=False
+                        )
+                        self.records.normalize_fact(
+                            conn,
+                            source_record_version_id=outcomes[0]["record_version_id"],
+                            metric_id="synthetic.measurement",
+                            fact_type="measurement",
+                            numeric_value=1.0,
+                            unit="count",
+                            calculation_version="normalize-page-v1",
+                            commit=False,
+                        )
+                        self.records.normalize_fact(
+                            conn,
+                            source_record_version_id=outcomes[1]["record_version_id"],
+                            metric_id="synthetic.measurement",
+                            fact_type="measurement",
+                            numeric_value=2.0,
+                            text_value="ambiguous",
+                            unit="count",
+                            calculation_version="normalize-page-v1",
+                            commit=False,
+                        )
+                finally:
+                    conn.rollback()
+                self.assertEqual(
+                    0,
+                    conn.execute(
+                        "SELECT COUNT(*) FROM source_record_version "
+                        "WHERE source_record_key LIKE 'failed-page-%'"
+                    ).fetchone()[0],
+                )
+                self.assertEqual(
+                    0,
+                    conn.execute(
+                        "SELECT COUNT(*) FROM normalized_fact "
+                        "WHERE calculation_version='normalize-page-v1'"
+                    ).fetchone()[0],
+                )
+            completed_arms += 1
+
+        with self.subTest("interval text fact retains canonical metadata"):
+            metric = self.records.synthetic_metric_definition()
+            metric.update(
+                {
+                    "metric_id": "synthetic.sleep.type",
+                    "display_name": "Synthetic sleep type",
+                    "value_kind": "text",
+                    "canonical_unit": None,
+                    "minimum_value": None,
+                    "maximum_value": None,
+                }
+            )
+            self.records.register_metric(self.conn, metric)
+            envelope = self.records.synthetic_envelope(
+                self.subject_id, source_record_key="interval-text"
+            )
+            envelope.update(
+                {
+                    "timestamp_precision": "interval",
+                    "event_start_utc": "2026-01-01T22:00:00Z",
+                    "event_end_utc": "2026-01-02T06:00:00Z",
+                    "source_updated_at": "2026-01-02T06:00:00Z",
+                    "ingested_at": "2026-01-02T07:00:00Z",
+                }
+            )
+            imported = self.records.import_envelope(self.conn, envelope)
+            fact = self.records.normalize_fact(
+                self.conn,
+                source_record_version_id=imported["record_version_id"],
+                metric_id="synthetic.sleep.type",
+                fact_type="sleep_session",
+                text_value="long_sleep",
+                event_start_utc="2026-01-01T22:00:00Z",
+                event_end_utc="2026-01-02T06:00:00Z",
+                attributes={"main": True},
+                calculation_version="normalize-v2",
+            )
+            row = self.conn.execute(
+                "SELECT text_value,event_start_utc,event_end_utc,unit,attributes_json "
+                "FROM normalized_fact WHERE fact_id=?",
+                (fact["fact_id"],),
+            ).fetchone()
+            self.assertEqual(
+                (
+                    "long_sleep",
+                    "2026-01-01T22:00:00Z",
+                    "2026-01-02T06:00:00Z",
+                    None,
+                    '{"main":true}',
+                ),
+                tuple(row),
+            )
+            completed_arms += 1
+
+        self.assertEqual(EXPECTED_TRANSACTION_ARMS, completed_arms)
+
     def test_source_registration_persists_an_explicit_completeness_rule(self):
         manifest = self.records.synthetic_source_manifest()
         self.assertEqual(

@@ -58,6 +58,11 @@ def _payload_hash(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
 
 
+def _finish(conn: sqlite3.Connection, commit: bool) -> None:
+    if commit:
+        conn.commit()
+
+
 def synthetic_source_manifest() -> Dict[str, Any]:
     return {
         "source_id": "synthetic.json",
@@ -341,6 +346,8 @@ def _record_issue(
     source_record_key: Optional[str] = None,
     record_version_id: Optional[str] = None,
     field_name: Optional[str] = None,
+    *,
+    commit: bool = True,
 ) -> None:
     conn.execute(
         "INSERT INTO quality_issue "
@@ -357,7 +364,7 @@ def _record_issue(
             _now(),
         ),
     )
-    conn.commit()
+    _finish(conn, commit)
 
 
 def _parse_timestamp(value: Any, field_name: str, *, required: bool = False) -> Optional[datetime]:
@@ -464,6 +471,8 @@ def _quarantine_envelope(
     envelope: Mapping[str, Any],
     reason_code: str,
     diagnostic_reference: Optional[str] = None,
+    *,
+    commit: bool = True,
 ) -> None:
     if not _valid_identity(conn, envelope):
         return
@@ -483,10 +492,15 @@ def _quarantine_envelope(
             _now(),
         ),
     )
-    conn.commit()
+    _finish(conn, commit)
 
 
-def import_envelope(conn: sqlite3.Connection, envelope: Mapping[str, Any]) -> Dict[str, Any]:
+def import_envelope(
+    conn: sqlite3.Connection,
+    envelope: Mapping[str, Any],
+    *,
+    commit: bool = True,
+) -> Dict[str, Any]:
     validate_envelope(envelope)
     registered_version = conn.execute(
         "SELECT 1 FROM source_contract_version WHERE source_id=? AND contract_version=?",
@@ -515,8 +529,16 @@ def import_envelope(conn: sqlite3.Connection, envelope: Mapping[str, Any]) -> Di
             subject_id=str(envelope["subject_id"]),
             source_id=str(envelope["source_id"]),
             source_record_key=str(envelope["source_record_key"]),
+            commit=False,
         )
-        _quarantine_envelope(conn, envelope, "version_conflict", "payload_sha256")
+        _quarantine_envelope(
+            conn,
+            envelope,
+            "version_conflict",
+            "payload_sha256",
+            commit=False,
+        )
+        _finish(conn, commit)
         return {"status": "rejected", "reason_code": "version_conflict"}
 
     highest = conn.execute(
@@ -531,8 +553,16 @@ def import_envelope(conn: sqlite3.Connection, envelope: Mapping[str, Any]) -> Di
             subject_id=str(envelope["subject_id"]),
             source_id=str(envelope["source_id"]),
             source_record_key=str(envelope["source_record_key"]),
+            commit=False,
         )
-        _quarantine_envelope(conn, envelope, "non_monotonic_version", "source_version")
+        _quarantine_envelope(
+            conn,
+            envelope,
+            "non_monotonic_version",
+            "source_version",
+            commit=False,
+        )
+        _finish(conn, commit)
         return {"status": "rejected", "reason_code": "non_monotonic_version"}
 
     record_version_id = str(uuid.uuid4())
@@ -563,8 +593,197 @@ def import_envelope(conn: sqlite3.Connection, envelope: Mapping[str, Any]) -> Di
             1 if envelope.get("tombstone") else 0,
         ),
     )
-    conn.commit()
+    _finish(conn, commit)
     return {"status": "inserted", "record_version_id": record_version_id}
+
+
+def import_envelopes(
+    conn: sqlite3.Connection,
+    envelopes: Iterable[Mapping[str, Any]],
+    *,
+    commit: bool = True,
+) -> list[dict[str, object]]:
+    outcomes = []
+    for envelope in envelopes:
+        try:
+            outcomes.append(import_envelope(conn, envelope, commit=False))
+        except RecordValidationError as error:
+            _quarantine_envelope(
+                conn,
+                envelope,
+                error.reason_code,
+                error.field_name,
+                commit=False,
+            )
+            outcomes.append({"status": "quarantined", "reason_code": error.reason_code})
+    _finish(conn, commit)
+    return outcomes
+
+
+def _normalize_fact(
+    conn: sqlite3.Connection,
+    *,
+    source_record_version_id: str,
+    metric_id: str,
+    fact_type: str,
+    calculation_version: str,
+    numeric_value: Optional[float],
+    text_value: Optional[str],
+    unit: Optional[str],
+    event_start_utc: Optional[str],
+    event_end_utc: Optional[str],
+    attributes: Optional[Mapping[str, Any]],
+    commit: bool,
+    subject_id: Optional[str] = None,
+    local_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    if (numeric_value is None) == (text_value is None):
+        raise RecordValidationError("fact_value_cardinality", "numeric_value")
+    if numeric_value is not None and (
+        isinstance(numeric_value, bool) or not isinstance(numeric_value, (int, float))
+    ):
+        raise RecordValidationError("invalid_numeric_value", "numeric_value")
+    if text_value is not None and not isinstance(text_value, str):
+        raise RecordValidationError("invalid_text_value", "text_value")
+    if attributes is not None and not isinstance(attributes, Mapping):
+        raise RecordValidationError("invalid_attributes", "attributes")
+    parsed_start = _parse_timestamp(event_start_utc, "event_start_utc")
+    parsed_end = _parse_timestamp(event_end_utc, "event_end_utc")
+    if parsed_end is not None and parsed_start is None:
+        raise RecordValidationError("event_start_required", "event_start_utc")
+    if parsed_start is not None and parsed_start.utcoffset() != timedelta(0):
+        raise RecordValidationError("timestamp_not_utc", "event_start_utc")
+    if parsed_end is not None and parsed_end.utcoffset() != timedelta(0):
+        raise RecordValidationError("timestamp_not_utc", "event_end_utc")
+    if parsed_start is not None and parsed_end is not None and parsed_end < parsed_start:
+        raise RecordValidationError("interval_order", "event_end_utc")
+    attributes_json = _canonical_json(dict(attributes or {}))
+    provenance = conn.execute(
+        "SELECT subject_id,local_date,tombstone,validation_state FROM source_record_version "
+        "WHERE record_version_id=?",
+        (source_record_version_id,),
+    ).fetchone()
+    if provenance is None:
+        return {"status": "quarantined", "reason_code": "unknown_provenance"}
+    derived_subject = str(provenance["subject_id"])
+    derived_date = str(provenance["local_date"])
+    reason_code = None
+    field_name = None
+    if subject_id is not None and subject_id != derived_subject:
+        reason_code = "provenance_subject_mismatch"
+    elif local_date is not None and local_date != derived_date:
+        reason_code = "provenance_date_mismatch"
+    elif provenance["tombstone"]:
+        reason_code = "tombstoned_provenance"
+    elif provenance["validation_state"] != "accepted":
+        reason_code = (
+            "rejected_provenance"
+            if provenance["validation_state"] == "rejected"
+            else "quarantined_provenance"
+        )
+    elif conn.execute(
+        "SELECT 1 FROM current_source_record WHERE record_version_id=?",
+        (source_record_version_id,),
+    ).fetchone() is None:
+        reason_code = "superseded_provenance"
+
+    metric = None
+    if reason_code is None:
+        metric = conn.execute(
+            "SELECT value_kind,canonical_unit,minimum_value,maximum_value,definition_version "
+            "FROM metric_definition WHERE metric_id=?",
+            (metric_id,),
+        ).fetchone()
+        if metric is None:
+            reason_code, field_name = "unknown_metric", "metric_id"
+        elif (metric["value_kind"] in {"number", "integer"}) != (numeric_value is not None):
+            reason_code = "value_kind_mismatch"
+            field_name = "numeric_value" if numeric_value is not None else "text_value"
+        elif metric["canonical_unit"] != unit:
+            reason_code, field_name = "unit_mismatch", "unit"
+        elif metric["minimum_value"] is not None and numeric_value < metric["minimum_value"]:
+            reason_code = "out_of_range"
+        elif metric["maximum_value"] is not None and numeric_value > metric["maximum_value"]:
+            reason_code = "out_of_range"
+
+    if reason_code is not None:
+        _record_issue(
+            conn,
+            reason_code,
+            subject_id=derived_subject,
+            record_version_id=source_record_version_id,
+            field_name=field_name,
+            commit=False,
+        )
+        _finish(conn, commit)
+        return {"status": "quarantined", "reason_code": reason_code}
+
+    assert metric is not None
+    existing = conn.execute(
+        "SELECT fact_id FROM normalized_fact "
+        "WHERE source_record_version_id=? AND metric_id=? AND calculation_version=?",
+        (source_record_version_id, metric_id, calculation_version),
+    ).fetchone()
+    if existing:
+        return {"status": "unchanged", "fact_id": existing["fact_id"]}
+    fact_id = str(uuid.uuid4())
+    conn.execute(
+        "INSERT INTO normalized_fact "
+        "(fact_id,subject_id,fact_type,metric_id,metric_definition_version,local_date,event_start_utc,"
+        "event_end_utc,numeric_value,text_value,unit,source_record_version_id,attributes_json,"
+        "validation_state,calculation_version,computed_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, 'accepted',?,?)",
+        (
+            fact_id,
+            derived_subject,
+            fact_type,
+            metric_id,
+            metric["definition_version"],
+            derived_date,
+            event_start_utc,
+            event_end_utc,
+            numeric_value,
+            text_value,
+            unit,
+            source_record_version_id,
+            attributes_json,
+            calculation_version,
+            _now(),
+        ),
+    )
+    _finish(conn, commit)
+    return {"status": "accepted", "fact_id": fact_id}
+
+
+def normalize_fact(
+    conn: sqlite3.Connection,
+    *,
+    source_record_version_id: str,
+    metric_id: str,
+    fact_type: str,
+    calculation_version: str,
+    numeric_value: Optional[float] = None,
+    text_value: Optional[str] = None,
+    unit: Optional[str] = None,
+    event_start_utc: Optional[str] = None,
+    event_end_utc: Optional[str] = None,
+    attributes: Optional[Mapping[str, Any]] = None,
+    commit: bool = True,
+) -> dict[str, object]:
+    return _normalize_fact(
+        conn,
+        source_record_version_id=source_record_version_id,
+        metric_id=metric_id,
+        fact_type=fact_type,
+        calculation_version=calculation_version,
+        numeric_value=numeric_value,
+        text_value=text_value,
+        unit=unit,
+        event_start_utc=event_start_utc,
+        event_end_utc=event_end_utc,
+        attributes=attributes,
+        commit=commit,
+    )
 
 
 def normalize_numeric_fact(
@@ -579,93 +798,22 @@ def normalize_numeric_fact(
     subject_id: Optional[str] = None,
     local_date: Optional[str] = None,
 ) -> Dict[str, Any]:
-    provenance = conn.execute(
-        "SELECT subject_id,local_date,tombstone,validation_state FROM source_record_version "
-        "WHERE record_version_id=?",
-        (source_record_version_id,),
-    ).fetchone()
-    if provenance is None:
-        return {"status": "quarantined", "reason_code": "unknown_provenance"}
-    derived_subject = str(provenance["subject_id"])
-    derived_date = str(provenance["local_date"])
-    if subject_id is not None and subject_id != derived_subject:
-        _record_issue(conn, "provenance_subject_mismatch", derived_subject, record_version_id=source_record_version_id)
-        return {"status": "quarantined", "reason_code": "provenance_subject_mismatch"}
-    if local_date is not None and local_date != derived_date:
-        _record_issue(conn, "provenance_date_mismatch", derived_subject, record_version_id=source_record_version_id)
-        return {"status": "quarantined", "reason_code": "provenance_date_mismatch"}
-    if provenance["tombstone"]:
-        _record_issue(conn, "tombstoned_provenance", derived_subject, record_version_id=source_record_version_id)
-        return {"status": "quarantined", "reason_code": "tombstoned_provenance"}
-    if provenance["validation_state"] != "accepted":
-        reason = "rejected_provenance" if provenance["validation_state"] == "rejected" else "quarantined_provenance"
-        _record_issue(conn, reason, derived_subject, record_version_id=source_record_version_id)
-        return {"status": "quarantined", "reason_code": reason}
-    current = conn.execute(
-        "SELECT 1 FROM current_source_record WHERE record_version_id=?",
-        (source_record_version_id,),
-    ).fetchone()
-    if current is None:
-        _record_issue(conn, "superseded_provenance", derived_subject, record_version_id=source_record_version_id)
-        return {"status": "quarantined", "reason_code": "superseded_provenance"}
-    metric = conn.execute(
-        "SELECT canonical_unit,minimum_value,maximum_value,definition_version "
-        "FROM metric_definition WHERE metric_id=?",
-        (metric_id,),
-    ).fetchone()
-    if metric is None:
-        _record_issue(
-            conn,
-            "unknown_metric",
-            subject_id=derived_subject,
-            record_version_id=source_record_version_id,
-            field_name="metric_id",
-        )
-        return {"status": "quarantined", "reason_code": "unknown_metric"}
-    if metric["canonical_unit"] != unit:
-        _record_issue(
-            conn,
-            "unit_mismatch",
-            subject_id=derived_subject,
-            record_version_id=source_record_version_id,
-            field_name="unit",
-        )
-        return {"status": "quarantined", "reason_code": "unit_mismatch"}
-    if metric["minimum_value"] is not None and value < metric["minimum_value"]:
-        _record_issue(conn, "out_of_range", derived_subject, record_version_id=source_record_version_id)
-        return {"status": "quarantined", "reason_code": "out_of_range"}
-    if metric["maximum_value"] is not None and value > metric["maximum_value"]:
-        _record_issue(conn, "out_of_range", derived_subject, record_version_id=source_record_version_id)
-        return {"status": "quarantined", "reason_code": "out_of_range"}
-    existing = conn.execute(
-        "SELECT fact_id FROM normalized_fact "
-        "WHERE source_record_version_id=? AND metric_id=? AND calculation_version=?",
-        (source_record_version_id, metric_id, calculation_version),
-    ).fetchone()
-    if existing:
-        return {"status": "unchanged", "fact_id": existing["fact_id"]}
-    fact_id = str(uuid.uuid4())
-    conn.execute(
-        "INSERT INTO normalized_fact "
-        "(fact_id,subject_id,fact_type,metric_id,metric_definition_version,local_date,numeric_value,unit,"
-        "source_record_version_id,validation_state,calculation_version,computed_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?, 'accepted',?,?)",
-        (
-            fact_id,
-            derived_subject,
-            fact_type,
-            metric_id,
-            metric["definition_version"],
-            derived_date,
-            value,
-            unit,
-            source_record_version_id,
-            calculation_version,
-            _now(),
-        ),
+    return _normalize_fact(
+        conn,
+        source_record_version_id=source_record_version_id,
+        metric_id=metric_id,
+        fact_type=fact_type,
+        calculation_version=calculation_version,
+        numeric_value=value,
+        text_value=None,
+        unit=unit,
+        event_start_utc=None,
+        event_end_utc=None,
+        attributes=None,
+        commit=True,
+        subject_id=subject_id,
+        local_date=local_date,
     )
-    conn.commit()
-    return {"status": "accepted", "fact_id": fact_id}
 
 
 def add_context_event(
