@@ -1,4 +1,5 @@
 import importlib
+import importlib.util
 import json
 import os
 import shutil
@@ -179,6 +180,8 @@ class DemoAndContractTests(unittest.TestCase):
         self.assertTrue(contracts.validate_contract("NormalizedFact", no_values))
 
     def test_built_wheel_loads_every_schema_outside_checkout(self):
+        if importlib.util.find_spec("pip") is None:
+            self.skipTest("pip is not importable in this interpreter; this test builds and installs the wheel with `python -m pip`")
         with tempfile.TemporaryDirectory() as tmp:
             root, source, wheels, target = Path(tmp), Path(tmp) / "source", Path(tmp) / "wheels", Path(tmp) / "site"
             shutil.copytree(ROOT, source, ignore=shutil.ignore_patterns(".git", "*.egg-info", "build", "dist", "__pycache__"))

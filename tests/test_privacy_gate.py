@@ -3,6 +3,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +59,23 @@ class PrivacyGateTests(unittest.TestCase):
         self.assertEqual(2, violations[0]["line"])
         self.assertEqual(("health.db", "private_health_artifact"),
                          (violations[1]["file"], violations[1]["reason_code"]))
+
+    def test_repository_scan_order_does_not_depend_on_directory_listing_order(self):
+        privacy_gate = load_module(self, "anders_health_core.privacy_gate")
+        real_rglob = Path.rglob
+
+        def reversed_listing(path, pattern):
+            return iter(sorted(real_rglob(path, pattern), reverse=True))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "bad.txt").write_text("/" + "Users/private/file\n", encoding="utf-8")
+            (root / "health.db").write_bytes(b"SQLite format 3\0private")
+            natural = [v["file"] for v in privacy_gate.scan_repository(root)]
+            with mock.patch.object(Path, "rglob", reversed_listing):
+                reversed_order = [v["file"] for v in privacy_gate.scan_repository(root)]
+        self.assertEqual(["bad.txt", "health.db"], natural)
+        self.assertEqual(natural, reversed_order)
 
     def test_history_scan_has_literal_clean_and_forbidden_arms(self):
         with tempfile.TemporaryDirectory() as tmp:
